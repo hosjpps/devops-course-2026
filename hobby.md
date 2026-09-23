@@ -5,3 +5,9 @@
 Стек: Python (aiogram), SQLite
 
 Цель: научиться упаковывать бота в Docker и автоматически деплоить его на VPS через GitHub Actions.
+
+## Сроки реализации
+
+1. MVP бота (запись трат, недельная сводка) — до занятия 5.
+2. Docker-образ и docker-compose — блок «Docker».
+3. CI/CD на GitHub Actions с автодеплоем на VPS — блок «CI/CD».
