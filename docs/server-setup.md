@@ -158,6 +158,7 @@ sudo ufw status verbose
 | `01-clean-install` | 27.10.2026 21:40 | чистая установка, `apt upgrade`, ВМ выключена |
 | `02-keys-configured` | 28.10.2026 10:24 | пользователь `devops`, вход по ключу, `~/.ssh/config` |
 | `03-ssh-hardened` | 28.10.2026 10:51 | `99-hardening.conf`, порт 2222, проброс 2222 → 2222 |
+| `04-nginx-https` | 28.10.2026 12:36 | Nginx, ресурс `devops.local` по HTTPS, перенаправление с HTTP |
 
 **[Хост]** список снимков: `VBoxManage snapshot devops-vm list`.
 
