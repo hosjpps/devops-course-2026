@@ -307,3 +307,40 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Публиковать порты только на `127.0.0.1`: Docker добавляет DNAT-правила в свои цепочки iptables,
 и порт на `0.0.0.0` доступен из сети в обход UFW.
+
+## 10. Контрольная работа № 2 (вариант 1)
+
+| Параметр | Значение |
+|---|---|
+| Репозиторий | `devops-kr2`, ветка `kr2/variant-1` (шаблон — remote `template`) |
+| Каталог на сервере | `~/kr2`, `.env` с правами `600`, при доставке не трогается (`--exclude=.env`) |
+| Сервисы | `app` (`kr2-app:1.0`, `127.0.0.1:8001`), `redis` (`redis:7-alpine`, том `redis_data`, порт не опубликован) |
+| Ресурс | `https://api.devops.local`, `/etc/nginx/sites-available/kr2`, сертификат `/etc/ssl/certs/kr2.crt` |
+| Снимки | `06-before-kr2` (до работы), `07-kr2` (после) |
+
+**[Хост]** в `/etc/hosts`: `192.168.56.101    api.devops.local`; доставка из корня `devops-kr2`:
+
+```bash
+rsync -avz --delete --exclude=.env --exclude=.git ./ devops:kr2/
+```
+
+**[VM]** секрет и запуск:
+
+```bash
+cd ~/kr2
+(umask 077; printf 'REDIS_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env)
+docker compose up -d --build
+```
+
+**[VM]** сертификат и ресурс (текст конфигурации — `nginx/kr2` в репозитории `devops-kr2`):
+
+```bash
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/kr2.key -out /etc/ssl/certs/kr2.crt \
+  -subj "/CN=api.devops.local" -addext "subjectAltName=DNS:api.devops.local"
+sudo chmod 600 /etc/ssl/private/kr2.key
+sudo ln -s /etc/nginx/sites-available/kr2 /etc/nginx/sites-enabled/kr2
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Раздел `[6]` сценария аудита выполняется, только если существует `~/kr2`.
