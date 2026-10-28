@@ -21,7 +21,7 @@
 | Адаптер | Тип | Интерфейс в ВМ | Адрес | Назначение |
 |---|---|---|---|---|
 | 1 | NAT | `enp0s8` | `10.0.2.15/24` (DHCP VirtualBox) | доступ в Интернет (apt), SSH с хоста через проброс порта |
-| 2 | Host-only (`vboxnet0`, хост `192.168.56.1`) | `enp0s9` | `192.168.56.101/24` (DHCP) | прямой доступ с хоста: SSH, HTTP/HTTPS по имени `devops.local` |
+| 2 | Host-only (`HostNetwork`, хост `192.168.56.1`) | `enp0s9` | `192.168.56.101/24` (DHCP) | прямой доступ с хоста: SSH, HTTP/HTTPS по имени `devops.local` |
 
 Оба адаптера настраиваются до первого запуска. Адрес Host-only выдаётся по DHCP — после
 восстановления сверить командой `ip -brief address` и при необходимости поправить `/etc/hosts` хоста.
@@ -44,7 +44,7 @@ VBoxManage controlvm devops-vm natpf1 "ssh,tcp,127.0.0.1,2222,,2222"
 | Пользователь | Группы | Аутентификация |
 |---|---|---|
 | `student` | `student`, `sudo` (создан установщиком) | только консоль ВМ; по SSH вход запрещён (`AllowUsers devops`) |
-| `devops` | `devops`, `sudo` | SSH только по ключу `~/.ssh/devops_vm` (ed25519); пароль — для `sudo` |
+| `devops` | `devops`, `sudo`, `users` | SSH только по ключу `~/.ssh/devops_vm` (ed25519); пароль — для `sudo` |
 | `root` | — | вход по SSH запрещён (`PermitRootLogin no`) |
 
 **[VM]** (через консоль или `ssh student@127.0.0.1 -p 2222` до hardening):
@@ -52,7 +52,7 @@ VBoxManage controlvm devops-vm natpf1 "ssh,tcp,127.0.0.1,2222,,2222"
 ```bash
 sudo adduser devops                 # пароль задать, остальные поля — Enter
 sudo usermod -aG sudo devops
-groups devops                       # devops : devops sudo
+groups devops                       # devops : devops sudo users
 ```
 
 **[Хост]** ключ и клиентская конфигурация:
@@ -158,7 +158,7 @@ sudo ufw status verbose
 | `01-clean-install` | 27.10.2026 21:40 | чистая установка, `apt upgrade`, ВМ выключена |
 | `02-keys-configured` | 28.10.2026 10:24 | пользователь `devops`, вход по ключу, `~/.ssh/config` |
 | `03-ssh-hardened` | 28.10.2026 10:51 | `99-hardening.conf`, порт 2222, проброс 2222 → 2222 |
-| `04-nginx-https` | 28.10.2026 12:36 | Nginx, ресурс `devops.local` по HTTPS, перенаправление с HTTP |
+| `04-nginx-https` | 28.10.2026 13:52 | Nginx, ресурс `devops.local` по HTTPS, перенаправление с HTTP |
 | `05-docker-compose` | 28.10.2026 15:12 | Docker Engine, проект `~/app` (app + db), том с данными |
 
 **[Хост]** список снимков: `VBoxManage snapshot devops-vm list`.
@@ -240,7 +240,7 @@ brew install rsync          # штатный rsync macOS 26 — openrsync, не 
 scripts/deploy.sh --dry-run && scripts/deploy.sh
 ```
 
-Снимок после настройки: `04-nginx-https` (28.10.2026 12:36).
+Снимок после настройки: `04-nginx-https` (28.10.2026 13:52).
 
 ## 9. Контейнеризация
 
