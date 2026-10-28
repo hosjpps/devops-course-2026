@@ -160,3 +160,82 @@ sudo ufw status verbose
 | `03-ssh-hardened` | 28.10.2026 10:51 | `99-hardening.conf`, порт 2222, проброс 2222 → 2222 |
 
 **[Хост]** список снимков: `VBoxManage snapshot devops-vm list`.
+
+## 8. Веб-сервер
+
+| Параметр | Значение |
+|---|---|
+| Пакет | `nginx` из репозитория Ubuntu 24.04 (1.24.0), `sudo apt install -y nginx` |
+| Конфигурация ресурса | `/etc/nginx/sites-available/devops-site`, ссылка в `/etc/nginx/sites-enabled/`; ссылка `default` удалена (файл сохранён) |
+| Каталог ресурса | `/var/www/devops-site`, владелец `devops:devops`, каталоги 755, файлы 644 |
+| Содержимое | каталог `site/` репозитория, доставка `scripts/deploy.sh` (rsync `--delete --chmod=D755,F644`) |
+| Сертификат | `/etc/ssl/certs/devops.crt`, `root:root`, 644, самоподписанный, SAN `DNS:devops.local` |
+| Ключ | `/etc/ssl/private/devops.key`, `root:root`, 600, RSA 2048 |
+| Срок действия | 365 дней с 28.10.2026 (до 28.10.2027) |
+| Журналы | `/var/log/nginx/devops-site.access.log`, `/var/log/nginx/devops-site.error.log` |
+
+**[VM]** установка, каталог, сертификат:
+
+```bash
+sudo apt update && sudo apt install -y nginx rsync
+sudo mkdir -p /var/www/devops-site
+sudo chown -R devops:devops /var/www/devops-site
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/devops.key \
+  -out /etc/ssl/certs/devops.crt \
+  -subj "/CN=devops.local" \
+  -addext "subjectAltName=DNS:devops.local"
+```
+
+**[VM]** `/etc/nginx/sites-available/devops-site`:
+
+```nginx
+# Блок 1: перенаправление HTTP -> HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name devops.local;
+    return 301 https://$host$request_uri;
+}
+
+# Блок 2: ресурс по HTTPS
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name devops.local;
+
+    ssl_certificate     /etc/ssl/certs/devops.crt;
+    ssl_certificate_key /etc/ssl/private/devops.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    root /var/www/devops-site;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    error_page 404 /404.html;
+    access_log /var/log/nginx/devops-site.access.log;
+    error_log /var/log/nginx/devops-site.error.log;
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/devops-site /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx     # только reload, не restart
+```
+
+HSTS не включать: браузер запомнит требование доверенного сертификата и перестанет пускать на
+ресурс с самоподписанным.
+
+**[Хост]** доверие к сертификату и доставка:
+
+```bash
+scp devops:/etc/ssl/certs/devops.crt ~/devops.crt
+brew install rsync          # штатный rsync macOS 26 — openrsync, не понимает --chmod=D755,F644
+scripts/deploy.sh --dry-run && scripts/deploy.sh
+```
+
+Снимок после настройки: `04-nginx-https` (28.10.2026 12:36).
