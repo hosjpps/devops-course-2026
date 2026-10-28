@@ -159,6 +159,7 @@ sudo ufw status verbose
 | `02-keys-configured` | 28.10.2026 10:24 | пользователь `devops`, вход по ключу, `~/.ssh/config` |
 | `03-ssh-hardened` | 28.10.2026 10:51 | `99-hardening.conf`, порт 2222, проброс 2222 → 2222 |
 | `04-nginx-https` | 28.10.2026 12:36 | Nginx, ресурс `devops.local` по HTTPS, перенаправление с HTTP |
+| `05-docker-compose` | 28.10.2026 15:12 | Docker Engine, проект `~/app` (app + db), том с данными |
 
 **[Хост]** список снимков: `VBoxManage snapshot devops-vm list`.
 
@@ -240,3 +241,69 @@ scripts/deploy.sh --dry-run && scripts/deploy.sh
 ```
 
 Снимок после настройки: `04-nginx-https` (28.10.2026 12:36).
+
+## 9. Контейнеризация
+
+| Параметр | Значение |
+|---|---|
+| Docker Engine | 28.5.2, пакеты `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin` из `download.docker.com` (не `docker.io`) |
+| Docker Compose | плагин v2.40.3 (`docker compose`) |
+| Группа `docker` | только `devops` (у него и так есть `sudo`: участник `docker` фактически равен root) |
+| Проект на сервере | `/home/devops/app` (`~/app`), доставка из каталога `app/` репозитория через rsync |
+| Файл `.env` | `/home/devops/app/.env`, владелец `devops`, права 600, только на сервере, в git не попадает |
+| Сервисы | `app` (образ `devops-app:1.0`, процесс от пользователя `app`), `db` (`postgres:16-alpine`) |
+| Публикуемые порты | `127.0.0.1:5000 → app:5000`; порт СУБД 5432 не публикуется |
+| Сеть | `app_backend` (bridge), приложение обращается к СУБД по имени `db` |
+| Том | `app_db_data` → `/var/lib/postgresql/data`; `docker compose down -v` его удаляет |
+| Обратный прокси | `https://devops.local/app/` → `http://127.0.0.1:5000/` |
+
+**[VM]** установка Docker Engine (официальная инструкция):
+
+```bash
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker devops      # затем переподключиться по SSH
+docker run --rm hello-world
+```
+
+**[Хост]** доставка проекта (`.env` исключается, иначе `--delete` удалит его на сервере):
+
+```bash
+rsync -avz --delete --exclude=.env app/ devops:app/
+```
+
+**[VM]** секреты и запуск:
+
+```bash
+cd ~/app
+cp .env.example .env && chmod 600 .env
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env
+docker compose up -d --build
+docker compose ps                   # db — (healthy)
+```
+
+**[VM]** в блок `server { listen 443 ssl; ... }` файла `/etc/nginx/sites-available/devops-site`:
+
+```nginx
+    location /app/ {
+        proxy_pass http://127.0.0.1:5000/;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Публиковать порты только на `127.0.0.1`: Docker добавляет DNAT-правила в свои цепочки iptables,
+и порт на `0.0.0.0` доступен из сети в обход UFW.
