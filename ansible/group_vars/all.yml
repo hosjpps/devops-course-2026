@@ -1,0 +1,6 @@
+---
+app_image: "ghcr.io/hosjpps/devops-ci-app"
+app_tag: "9196ed941ffaf5adaca36b648a86bc45133d0ce9"
+app_container_name: "devops-ci-app"
+app_host_port: 5000
+app_internal_port: 5000

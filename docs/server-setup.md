@@ -344,3 +344,28 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Раздел `[6]` сценария аудита выполняется, только если существует `~/kr2`.
+
+## 11. Ansible (ПР № 11)
+
+| Параметр | Значение |
+|---|---|
+| Проект | `ansible/` в этом репозитории, запуск из каталога `ansible/` |
+| Управляющий узел | MacBook (ansible-core 2.18, коллекции из `ansible/requirements.yml`) |
+| Управляемый узел | `devops-vm` — Ubuntu 24.04 x86_64 в облачной песочнице Daytona вместо VirtualBox; SSH доступен через шлюз Daytona по туннелю `127.0.0.1:2222`, HTTP — `127.0.0.1:8080` |
+| Inventory | `inventory/bootstrap.ini` — первичный запуск от `student` по паролю; `inventory/prod.ini` — `devops` по ключу `~/.ssh/devops_vm` |
+| Роли | `base` — Docker из официального репозитория; `ssh` — пользователь, ключ, sudo, hardening, UFW; `nginx` — reverse proxy; `app` — контейнер и проверка `/health` |
+| Образ | `ghcr.io/hosjpps/devops-ci-app`, полный SHA в `group_vars/all.yml` (`app_tag`) |
+| Приложение | контейнер `devops-ci-app`, `127.0.0.1:5000`, health endpoint `/health`, наружу — через Nginx на порту 80 |
+
+Особенность песочницы: служебные порты агента Daytona (2280, 22220, 22222) разрешены в UFW при подготовке узла, иначе `default deny` отрезает и туннель, и управление песочницей. systemd в песочнице нет, службы управляются через `service`.
+
+```bash
+ssh -F ~/.ssh/daytona_devops_config -f -N -L 2222:127.0.0.1:22 -L 8080:127.0.0.1:80 daytona-vm-gw   # туннель
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i inventory/bootstrap.ini site.yml --ask-pass --ask-become-pass   # первичный запуск
+ansible-playbook site.yml      # повторный запуск, ожидается changed=0
+ansible-playbook verify.yml    # read-only аудит
+```
+
+Пароли и закрытые ключи в репозиторий не помещаются.
